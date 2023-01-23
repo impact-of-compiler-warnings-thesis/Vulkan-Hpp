@@ -1,0 +1,49 @@
+name: SonarCloud
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  build:
+    name: Build and analyze
+    runs-on: ubuntu-latest
+    env:
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          submodules: recursive
+      - name: Install sonar-scanner and build-wrapper
+        uses: SonarSource/sonarcloud-github-c-cpp@v1
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install ninja-build \
+                           libgl-dev \
+                           libxcursor-dev \
+                           libxi-dev \
+                           libxinerama-dev \
+                           libxrandr-dev
+      - name: Generate build files
+        run: |
+          mkdir build && cd build
+          cmake .. -GNinja \
+                   -DCMAKE_BUILD_TYPE=Debug \
+                   -DSAMPLES_BUILD=ON \
+                   -DSAMPLES_BUILD_ONLY_DYNAMIC=ON \
+                   -DSAMPLES_BUILD_WITH_LOCAL_VULKAN_HPP=ON \
+                   -DTESTS_BUILD=ON \
+                   -DTESTS_BUILD_ONLY_DYNAMIC=ON \
+                   -DTESTS_BUILD_WITH_LOCAL_VULKAN_HPP=ON \
+      - name: Run build-wrapper
+        run: |
+          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ninja -C build
+      - name: Run sonar-scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"
